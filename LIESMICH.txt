@@ -1,0 +1,15 @@
+Aufguss-Duftkompass fürs iPhone – Version 2.0
+
+So kommt die App aufs iPhone:
+1. Alle Dateien dieses Ordners zusammen auf einen Webspace mit https hochladen,
+   z. B. kostenlos bei GitHub Pages oder Netlify. Dateinamen nicht ändern.
+2. Die Adresse auf dem iPhone in Safari öffnen.
+3. Teilen → „Zum Home-Bildschirm“ (falls gefragt: als Web-App öffnen).
+4. Ab jetzt nur noch über das Symbol öffnen. Die App läuft dann auch ohne Internet,
+   eigene Öle, Mischungen und Aufgüsse werden auf dem iPhone gespeichert.
+
+Neue Version: die neuen Dateien an dieselbe Stelle hochladen und die alten ersetzen.
+Beim nächsten Start mit Internet lädt die App die neue Version, deine Einträge bleiben.
+
+Sichern: Aufgüsse → „Teilen und sichern“ → „Sicherung kopieren“ und z. B. in Notizen einfügen.
+Wird das Symbol vom Home-Bildschirm gelöscht, sind die Einträge sonst weg.
