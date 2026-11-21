@@ -1,6 +1,6 @@
-// Offline-Speicher für den Aufguss-Duftkompass 2.1.
+// Offline-Speicher für den Aufguss-Duftkompass 2.3.
 // Die App kommt aus dem Cache; mit Internet wird im Hintergrund nachgeladen, eine neue Version gilt ab dem nächsten Start.
-const CACHE = "duftkompass-2.1";
+const CACHE = "duftkompass-2.3";
 const FILES = ["./", "index.html", "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

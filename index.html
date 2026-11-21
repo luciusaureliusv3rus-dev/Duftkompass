@@ -320,6 +320,8 @@ textarea { min-height: 76px; resize: vertical; }
 .bal-msg { display: flex; align-items: center; gap: 8px; margin: 12px 0 8px; font-size: 15px; color: var(--muted); }
 .bal-msg .nt { width: 18px; height: 18px; }
 .bal-ok { color: var(--good); font-weight: 700; }
+.chip-nt { display: inline-flex; align-items: center; gap: 2px; margin-left: 1px; }
+.chip-nt .nt { width: 15px; height: 15px; }
 </style>
 </head>
 <body>
@@ -351,7 +353,7 @@ const MOOD = Object.fromEntries(DATA.moods.map(m => [m.id, m]));
 const BLEND = Object.fromEntries(DATA.blends.map(b => [b.id, b]));
 const BUILTIN = new Set(DATA.oils.map(o => o.id));
 const MAX_MIX = 8;
-const APP_VERSION = "2.1";
+const APP_VERSION = "2.3";
 const MAX_ROUNDS = 8;
 const REF_RE = /^(b|k|o):[A-Za-z0-9_.~:@+\-]+$/;
 const TRIAD = ["minze", "nadel", "zitrus"];
@@ -480,7 +482,8 @@ function suggestions(sel) {
     }
     if (ok && strong >= need) out.push({ o: o, score: score, strong: strong });
   }
-  out.sort((x, y) => y.strong - x.strong || y.score - x.score || byName(x.o, y.o));
+  // bei Gleichstand zuerst gut belegte Öle (viele bekannte Partner), dann nach Namen
+  out.sort((x, y) => y.strong - x.strong || y.score - x.score || (y.o.passt || []).length - (x.o.passt || []).length || byName(x.o, y.o));
   return out.slice(0, 8);
 }
 function kombiTitle(k) {
@@ -522,7 +525,9 @@ function oilChip(id, opts) {
   const label = esc(opts.label || o.name);
   const st = ' style="' + famVar(o.fam) + '"';
   if (opts.remove) return '<button type="button" class="chip"' + st + ' data-action="' + opts.remove + '" data-id="' + esc(id) + '" aria-label="' + label + ' entfernen"><span class="dot"></span>' + label + '<span class="x" aria-hidden="true">✕</span></button>';
-  if (opts.add) return '<button type="button" class="chip"' + st + ' data-action="' + opts.add + '" data-id="' + esc(id) + '" aria-label="' + label + ' hinzufügen"><span class="dot"></span>' + label + '<span class="plus" aria-hidden="true">+</span></button>';
+  // auf Wunsch kleine Duftnoten-Piktogramme hinter dem Namen (Vorschläge beim Mischen)
+  const nts = opts.notes && noteParts(o.note).length ? '<span class="chip-nt" title="' + esc(o.note) + '">' + noteParts(o.note).map(k => noteIcon(k[0])).join("") + "</span>" : "";
+  if (opts.add) return '<button type="button" class="chip"' + st + ' data-action="' + opts.add + '" data-id="' + esc(id) + '" aria-label="' + label + ' hinzufügen"><span class="dot"></span>' + label + nts + '<span class="plus" aria-hidden="true">+</span></button>';
   return '<button type="button" class="chip"' + st + ' data-action="open" data-id="' + esc(id) + '"><span class="dot"></span>' + label + "</button>";
 }
 function picker(name, placeholder, disabled) {
@@ -870,11 +875,11 @@ function viewMix(ref) {
     (b && b.url ? '<p class="note" style="margin-top:18px">Quelle: <a href="' + esc(b.url) + '" target="_blank" rel="noopener">' + esc(b.brand) + "</a></p>" : "") + "</article>";
 }
 /* Duftnoten-Balance beim Mischen: Sind Kopf, Herz und Basis abgedeckt? Für fehlende Noten passende Öle vorschlagen. */
-function noteCandidates(sel, part) {
-  // Öle mit der fehlenden Note, die zu allen gewählten Ölen passen (kein „unklar“), die bewährtesten zuerst
+function rankCompatible(sel, keep) {
+  // Öle, die zu allen gewählten Ölen passen (kein „unklar“), die bewährtesten zuerst
   const out = [];
   for (const o of OIL.values()) {
-    if (sel.indexOf(o.id) >= 0 || String(o.note || "").indexOf(part) < 0) continue;
+    if (sel.indexOf(o.id) >= 0 || !keep(o)) continue;
     let score = 0, strong = 0, ok = true;
     for (const s of sel) {
       const st = pairInfo(o.id, s).best;
@@ -884,8 +889,19 @@ function noteCandidates(sel, part) {
     }
     if (ok) out.push({ o: o, score: score, strong: strong });
   }
-  out.sort((x, y) => y.strong - x.strong || y.score - x.score || byName(x.o, y.o));
-  return out.slice(0, 3).map(x => x.o);
+  // bei Gleichstand zuerst gut belegte Öle (viele bekannte Partner), dann nach Namen
+  const known = o => (o.passt || []).length;
+  out.sort((x, y) => y.strong - x.strong || y.score - x.score || known(y.o) - known(x.o) || byName(x.o, y.o));
+  return out.map(x => x.o);
+}
+function noteCandidates(sel, part) {
+  return rankCompatible(sel, o => String(o.note || "").indexOf(part) >= 0).slice(0, 3);
+}
+function mixSuggestions(sel, skip) {
+  // „Passt dazu“: erst die gut belegten Vorschläge; gibt es davon zu wenige, weitere Öle, die zu allen gewählten passen
+  const out = suggestions(sel).map(x => x.o).filter(o => skip.indexOf(o.id) < 0);
+  if (out.length < 5) rankCompatible(sel, o => skip.indexOf(o.id) < 0 && out.indexOf(o) < 0).slice(0, 5 - out.length).forEach(o => out.push(o));
+  return out.slice(0, 8);
 }
 function noteBalance(sel, full) {
   // Eigener Abschnitt unter „Passt dazu“: Piktogramme mit Anzahl je Duftnote, für jede fehlende Note passende Öle
@@ -901,7 +917,7 @@ function noteBalance(sel, full) {
         const cand = full ? [] : noteCandidates(sel, k[1]);
         cand.forEach(o => ids.push(o.id));
         return '<p class="bal-msg">' + noteIcon(k[0]) + "Es fehlt eine " + k[2] + (cand.length ? ". Passend dazu:" : ".") + "</p>" +
-          (cand.length ? '<div class="chips">' + cand.map(o => oilChip(o.id, { add: "sug-add" })).join("") + "</div>" : "");
+          (cand.length ? '<div class="chips">' + cand.map(o => oilChip(o.id, { add: "sug-add", notes: true })).join("") + "</div>" : "");
       }).join("");
   return { html: '<section class="section balance"><h2 class="label">Duftnoten-Balance</h2><div class="bal-row">' + pills + "</div>" + body + "</section>", ids: ids };
 }
@@ -911,13 +927,13 @@ function viewMischen() {
   const full = f.oele.length >= MAX_MIX;
   const bal = noteBalance(sel, full);
   // „Passt dazu“ ohne die Öle, die schon in der Duftnoten-Balance vorgeschlagen werden
-  const sug = full ? [] : suggestions(sel).filter(x => bal.ids.indexOf(x.o.id) < 0);
+  const sug = full || !sel.length ? [] : mixSuggestions(sel, bal.ids);
   return topbar() + '<h1 class="page-title">' + (f.id ? "Mischung bearbeiten" : "Neue Mischung") + "</h1>" +
     '<p class="note" style="font-size:15px">Bis zu ' + MAX_MIX + " Öle für eine Eiskugel. Die Linien zeigen, wie gut sie zusammenpassen.</p>" +
     (f.oele.length ? '<div class="chips" style="margin-top:14px">' + f.oele.map(id => oilChip(id, { remove: "form-remove" })).join("") + "</div>" : "") +
     picker("form", full ? "Höchstens " + MAX_MIX + " Öle" : "Öl hinzufügen …", full) +
     checkHTML(sel) +
-    (sug.length ? '<section class="section suggest"><h2 class="label">Passt dazu</h2><div class="chips">' + sug.map(x => oilChip(x.o.id, { add: "sug-add" })).join("") + "</div></section>" : "") +
+    (sug.length ? '<section class="section suggest"><h2 class="label">Passt dazu</h2><div class="chips">' + sug.map(o => oilChip(o.id, { add: "sug-add", notes: true })).join("") + "</div></section>" : "") +
     bal.html +
     (editable
       ? '<form class="form section" data-form="kombi" novalidate><h2 class="label" style="margin:0">' + (f.id ? "Änderungen" : "Als eigene Mischung speichern") + "</h2>" + dbBanner() +
