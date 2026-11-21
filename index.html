@@ -209,8 +209,6 @@ textarea { min-height: 76px; resize: vertical; }
 .ln-offen { stroke: var(--open); stroke-width: 3; stroke-dasharray: 1 8; }
 .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; padding: 2px 8px 0; font-size: 13px; color: var(--muted); }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
-.verdict { margin: 12px 0 0; font-size: 17px; font-weight: 700; }
-.verdict .muted { font-weight: 400; }
 .warnbox { margin: 12px 0 0; padding: 10px 12px; border-left: 4px solid var(--warn); border-radius: 8px; background: var(--surface); font-size: 15px; }
 .warnbox strong { color: var(--warn); }
 
@@ -310,6 +308,18 @@ textarea { min-height: 76px; resize: vertical; }
 .wh-c3 { font-family: var(--font-display); font-size: 15px; font-weight: 600; fill: var(--ink); text-anchor: middle; }
 .wheel-oil { margin: 2px 0 14px; }
 .wheel-oil .wheel-svg { max-width: 300px; }
+/* Duftnoten-Balance beim Mischen */
+.bal-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 6px; }
+.bal-pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 14px 6px 11px; border-radius: 999px; border: 1.5px dashed #d9cfc0; color: var(--muted); font-size: 15px; font-weight: 700; line-height: 1.2; }
+.bal-pill .nt { width: 20px; height: 20px; opacity: .45; }
+.bal-pill.on { border-style: solid; border-color: transparent; color: #fff; }
+.bal-pill.on .nt { fill: #fff; opacity: 1; }
+.bal-kopf.on { background: var(--n-kopf); }
+.bal-herz.on { background: var(--n-herz); }
+.bal-basis.on { background: var(--n-basis); }
+.bal-msg { display: flex; align-items: center; gap: 8px; margin: 12px 0 8px; font-size: 15px; color: var(--muted); }
+.bal-msg .nt { width: 18px; height: 18px; }
+.bal-ok { color: var(--good); font-weight: 700; }
 </style>
 </head>
 <body>
@@ -341,7 +351,7 @@ const MOOD = Object.fromEntries(DATA.moods.map(m => [m.id, m]));
 const BLEND = Object.fromEntries(DATA.blends.map(b => [b.id, b]));
 const BUILTIN = new Set(DATA.oils.map(o => o.id));
 const MAX_MIX = 8;
-const APP_VERSION = "2.0";
+const APP_VERSION = "2.1";
 const MAX_ROUNDS = 8;
 const REF_RE = /^(b|k|o):[A-Za-z0-9_.~:@+\-]+$/;
 const TRIAD = ["minze", "nadel", "zitrus"];
@@ -691,25 +701,12 @@ function iceSvg(sel, pairs) {
     '<circle class="ice-speck" cx="' + (cx + 34) + '" cy="' + (cy - 46) + '" r="2.2"/><circle class="ice-speck" cx="' + (cx - 48) + '" cy="' + (cy + 20) + '" r="1.6"/><circle class="ice-speck" cx="' + (cx + 22) + '" cy="' + (cy + 44) + '" r="1.8"/>' +
     lines + nodes + empty + "</svg>";
 }
-function checkHTML(sel, editing) {
+function checkHTML(sel) {
+  // Eiskugel mit Linien (zeigt, wie gut die Paare passen) und Warnhinweise; ein Urteil in Worten gibt es nicht mehr
   const pairs = [];
   for (let x = 0; x < sel.length; x++) for (let y = x + 1; y < sel.length; y++) pairs.push({ a: sel[x], b: sel[y], i: pairInfo(sel[x], sel[y]) });
-  const cnt = { gut: 0, regel: 0, offen: 0 };
-  pairs.forEach(p => { cnt[LEVEL[p.i.best]]++; });
-  let verdict = "";
-  if (sel.length < 2) verdict = editing ? (sel.length ? "Wähle noch ein Öl dazu." : "Wähle mindestens zwei Öle.") : "";
-  else if (pairs.length === 1) verdict = cnt.gut ? "Das Paar ist bewährt." : cnt.regel ? "Das Paar harmoniert zusammen." : "Das Paar ist unklar.";
-  else if (cnt.gut === pairs.length) verdict = "Alle " + pairs.length + " Paare sind bewährt.";
-  else {
-    const bits = [cnt.gut + " von " + pairs.length + " Paaren bewährt"];
-    if (cnt.regel) bits.push(cnt.regel + (cnt.regel === 1 ? " harmoniert zusammen" : " harmonieren zusammen"));
-    if (cnt.offen) bits.push(cnt.offen + " unklar");
-    verdict = bits.join(", ") + ".";
-  }
-  const hint = !cnt.offen ? "" : pairs.length === 1 ? "Erst mit einem Tropfen testen." : "Unklare Paare vorsichtig testen.";
   const warns = sel.map(id => OIL.get(id)).filter(o => o && o.warn);
   return '<div class="stage">' + iceSvg(sel, pairs) + legendHTML() + "</div>" +
-    (editing && verdict ? '<p class="verdict">' + esc(verdict) + (hint ? ' <span class="muted">' + hint + "</span>" : "") + "</p>" : "") +
     warns.map(o => '<div class="warnbox"><strong>' + esc(o.name) + ":</strong> " + esc(o.warn) + "</div>").join("");
 }
 
@@ -867,22 +864,61 @@ function viewMix(ref) {
     '<h1 class="page-title">' + esc(m.label) + "</h1>" +
     (k && k.notiz ? '<p class="page-sub pre">' + esc(k.notiz) + "</p>" : "") +
     '<div class="chips" style="margin-top:16px">' + chips + "</div>" +
-    checkHTML(m.oils, false) +
+    checkHTML(m.oils) +
     (m.more ? '<p class="note">Der Hersteller nennt nicht alle Öle dieser Mischung.</p>' : "") +
     (acts ? '<div class="actions">' + acts + "</div>" : "") +
     (b && b.url ? '<p class="note" style="margin-top:18px">Quelle: <a href="' + esc(b.url) + '" target="_blank" rel="noopener">' + esc(b.brand) + "</a></p>" : "") + "</article>";
+}
+/* Duftnoten-Balance beim Mischen: Sind Kopf, Herz und Basis abgedeckt? Für fehlende Noten passende Öle vorschlagen. */
+function noteCandidates(sel, part) {
+  // Öle mit der fehlenden Note, die zu allen gewählten Ölen passen (kein „unklar“), die bewährtesten zuerst
+  const out = [];
+  for (const o of OIL.values()) {
+    if (sel.indexOf(o.id) >= 0 || String(o.note || "").indexOf(part) < 0) continue;
+    let score = 0, strong = 0, ok = true;
+    for (const s of sel) {
+      const st = pairInfo(o.id, s).best;
+      if (st === "offen") { ok = false; break; }
+      if (st === "bewaehrt" || st === "passt" || st === "eigene") strong++;
+      score += STATUS[st].w;
+    }
+    if (ok) out.push({ o: o, score: score, strong: strong });
+  }
+  out.sort((x, y) => y.strong - x.strong || y.score - x.score || byName(x.o, y.o));
+  return out.slice(0, 3).map(x => x.o);
+}
+function noteBalance(sel, full) {
+  // Eigener Abschnitt unter „Passt dazu“: Piktogramme mit Anzahl je Duftnote, für jede fehlende Note passende Öle
+  const oils = sel.map(id => OIL.get(id)).filter(Boolean);
+  if (!oils.length) return { html: "", ids: [] };
+  const cnt = NOTE_KEYS.map(k => oils.filter(o => String(o.note || "").indexOf(k[1]) >= 0).length);
+  const pills = NOTE_KEYS.map((k, i) => '<span class="bal-pill bal-' + k[0] + (cnt[i] ? " on" : "") + '" title="' + k[2] + (cnt[i] ? "" : " fehlt") + '">' + noteIcon(k[0]) +
+    '<span class="bal-n">' + (cnt[i] || "–") + '</span><span class="sr">' + k[2] + ": " + cnt[i] + "</span></span>").join("");
+  const missing = NOTE_KEYS.filter((k, i) => !cnt[i]), ids = [];
+  const body = !missing.length
+    ? '<p class="bal-msg bal-ok">Kopf, Herz und Basis sind abgedeckt.</p>'
+    : missing.map(k => {
+        const cand = full ? [] : noteCandidates(sel, k[1]);
+        cand.forEach(o => ids.push(o.id));
+        return '<p class="bal-msg">' + noteIcon(k[0]) + "Es fehlt eine " + k[2] + (cand.length ? ". Passend dazu:" : ".") + "</p>" +
+          (cand.length ? '<div class="chips">' + cand.map(o => oilChip(o.id, { add: "sug-add" })).join("") + "</div>" : "");
+      }).join("");
+  return { html: '<section class="section balance"><h2 class="label">Duftnoten-Balance</h2><div class="bal-row">' + pills + "</div>" + body + "</section>", ids: ids };
 }
 function viewMischen() {
   const f = S.form, editable = canEditNow();
   const sel = f.oele.filter(id => OIL.has(id));
   const full = f.oele.length >= MAX_MIX;
-  const sug = full ? [] : suggestions(sel);
+  const bal = noteBalance(sel, full);
+  // „Passt dazu“ ohne die Öle, die schon in der Duftnoten-Balance vorgeschlagen werden
+  const sug = full ? [] : suggestions(sel).filter(x => bal.ids.indexOf(x.o.id) < 0);
   return topbar() + '<h1 class="page-title">' + (f.id ? "Mischung bearbeiten" : "Neue Mischung") + "</h1>" +
     '<p class="note" style="font-size:15px">Bis zu ' + MAX_MIX + " Öle für eine Eiskugel. Die Linien zeigen, wie gut sie zusammenpassen.</p>" +
     (f.oele.length ? '<div class="chips" style="margin-top:14px">' + f.oele.map(id => oilChip(id, { remove: "form-remove" })).join("") + "</div>" : "") +
     picker("form", full ? "Höchstens " + MAX_MIX + " Öle" : "Öl hinzufügen …", full) +
-    checkHTML(sel, true) +
-    (sug.length ? '<section class="section"><h2 class="label">Passt dazu</h2><div class="chips">' + sug.map(s => oilChip(s.o.id, { add: "sug-add" })).join("") + "</div></section>" : "") +
+    checkHTML(sel) +
+    (sug.length ? '<section class="section suggest"><h2 class="label">Passt dazu</h2><div class="chips">' + sug.map(x => oilChip(x.o.id, { add: "sug-add" })).join("") + "</div></section>" : "") +
+    bal.html +
     (editable
       ? '<form class="form section" data-form="kombi" novalidate><h2 class="label" style="margin:0">' + (f.id ? "Änderungen" : "Als eigene Mischung speichern") + "</h2>" + dbBanner() +
         '<div class="field"><label for="k-name">Name</label><input id="k-name" type="text" maxlength="80" value="' + esc(f.name) + '" placeholder="z. B. Winterwald (sonst die Öle)" data-bind="form.name"></div>' +

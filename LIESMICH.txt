@@ -1,4 +1,4 @@
-Aufguss-Duftkompass fürs iPhone – Version 2.0
+Aufguss-Duftkompass fürs iPhone – Version 2.1
 
 So kommt die App aufs iPhone:
 1. Alle Dateien dieses Ordners zusammen auf einen Webspace mit https hochladen,
